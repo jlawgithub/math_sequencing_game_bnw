@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>排列規律小達人 - Sequencing Patterns Game</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Canvas Confetti Library -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Zen Maru Gothic', 'Fredoka', sans-serif;
+      background: linear-gradient(135deg, #e0f2fe 0%, #fef3c7 50%, #fce7f3 100%);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .bounce-in {
+      animation: bounceIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    @keyframes bounceIn {
+      0% { transform: scale(0.3); opacity: 0; }
+      50% { transform: scale(1.05); opacity: 1; }
+      70% { transform: scale(0.9); }
+      100% { transform: scale(1); }
+    }
+
+    .pulse-star {
+      animation: pulseStar 1.2s infinite alternate ease-in-out;
+    }
+
+    @keyframes pulseStar {
+      0% { transform: scale(1) rotate(0deg); }
+      100% { transform: scale(1.25) rotate(12deg); }
+    }
+
+    .slot-blank {
+      border: 3.5px dashed #f59e0b;
+      background-color: #fffbeb;
+      box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+      animation: pulseBlank 1.5s infinite;
+    }
+
+    @keyframes pulseBlank {
+      0%, 100% { border-color: #f59e0b; background-color: #fffbeb; }
+      50% { border-color: #d97706; background-color: #fef3c7; }
+    }
+
+    .shake {
+      animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+    }
+
+    @keyframes shake {
+      10%, 90% { transform: translate3d(-2px, 0, 0); }
+      20%, 80% { transform: translate3d(4px, 0, 0); }
+      30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+      40%, 60% { transform: translate3d(6px, 0, 0); }
+    }
+
+    /* 隱藏原生滾動條，保護極限畫面顯示 */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-3 md:p-6 text-slate-800 overflow-x-hidden">
+
+  <!-- 頁頭與狀態統計 -->
+  <header class="max-w-5xl w-full mx-auto flex flex-row justify-between items-center bg-white/90 backdrop-blur-md p-3 sm:p-4 rounded-3xl shadow-lg border-2 border-amber-200 gap-2">
+    <div class="flex items-center gap-2 sm:gap-3">
+      <div class="bg-amber-400 text-white p-2.5 sm:p-3 rounded-2xl shadow-md text-xl sm:text-2xl">
+        <i class="fa-solid fa-shapes"></i>
+      </div>
+      <div>
+        <h1 class="text-base sm:text-xl md:text-2xl font-black text-amber-600 tracking-wide">排列規律小達人</h1>
+        <p class="text-[10px] sm:text-xs md:text-sm text-slate-500 font-bold hidden sm:block">Sequencing Patterns Game（隨機 20 題）</p>
+      </div>
+    </div>
+
+    <!-- 計分與星星數 -->
+    <div class="flex items-center gap-2 sm:gap-4 bg-amber-50 px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl border border-amber-200">
+      <div class="flex items-center gap-1">
+        <i class="fa-solid fa-star text-amber-400 text-xl sm:text-3xl pulse-star drop-shadow"></i>
+        <span id="star-count" class="text-xl sm:text-2xl font-black text-amber-600">0</span>
+      </div>
+      <div class="h-6 sm:h-8 w-0.5 bg-amber-200"></div>
+      <div class="text-xs sm:text-sm font-bold text-slate-600">
+        進度：<span id="current-question-num" class="text-amber-600 text-base sm:text-lg font-black">1</span> / 20
+      </div>
+    </div>
+  </header>
+
+  <!-- 主要遊戲卡片區塊 -->
+  <main class="max-w-5xl w-full mx-auto my-3 md:my-6 flex-1 flex flex-col justify-center">
+    
+    <!-- 答對/答錯懸浮反饋提示框 -->
+    <div id="feedback-message" class="hidden mb-3 text-center py-2 px-6 rounded-full text-sm sm:text-lg font-bold transition-all duration-300 shadow-md max-w-md mx-auto"></div>
+
+    <div class="bg-white rounded-3xl p-3 sm:p-6 md:p-8 shadow-xl border-4 border-amber-100 flex flex-col items-center relative overflow-hidden">
+      
+      <!-- 題目引導與類別數量標籤 -->
+      <div class="w-full mb-3 sm:mb-5 flex items-center justify-between">
+        <span id="pattern-hint" class="bg-sky-100 text-sky-700 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-bold flex items-center gap-1.5">
+          <i class="fa-solid fa-lightbulb"></i> 觀察排列規律，填補缺少的圖案
+        </span>
+        <button onclick="playPromptSound()" class="text-slate-400 hover:text-amber-500 transition text-lg sm:text-xl p-1" title="聲音提示">
+          <i class="fa-solid fa-volume-high"></i>
+        </button>
+      </div>
+
+      <!-- 序列展示區 (Sequence Track) - 嚴格單行 display (flex-nowrap) -->
+      <div class="w-full overflow-x-auto no-scrollbar py-2">
+        <div id="sequence-container" class="flex flex-nowrap justify-center items-center gap-1.5 sm:gap-2.5 md:gap-3 my-1 min-h-[100px] sm:min-h-[120px] p-2 sm:p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 w-full">
+          <!-- 動態載入單行項目 -->
+        </div>
+      </div>
+
+      <!-- 提示點擊動作 -->
+      <div class="text-amber-500 text-xs sm:text-sm font-bold my-2 sm:my-3 flex items-center gap-1">
+        <i class="fa-solid fa-hand-pointer animate-bounce"></i> 點擊下方正確的圖片填補空格
+      </div>
+
+      <!-- 選項按鈕區 (Options Area) -->
+      <div id="options-container" class="w-full flex flex-wrap justify-center gap-2.5 sm:gap-5 md:gap-6 mt-1 sm:mt-2">
+        <!-- 動態載入選項按鈕 -->
+      </div>
+
+    </div>
+  </main>
+
+  <!-- 頁腳 -->
+  <footer class="text-center text-[11px] sm:text-xs text-slate-400 font-bold py-1">
+    趣味排列規律 互動學習遊戲 &copy; 2026 Fun Learning Kids
+  </footer>
+
+  <!-- 遊戲結束總結 Modal 彈窗 -->
+  <div id="summary-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full text-center shadow-2xl border-4 border-amber-300 bounce-in">
+      <div class="text-5xl sm:text-6xl mb-2 sm:mb-3">🎉</div>
+      <h2 class="text-2xl sm:text-3xl font-black text-amber-500 mb-1">太棒了！挑戰完成！</h2>
+      <p class="text-slate-500 font-bold mb-5 text-sm sm:text-base">你成功完成了所有排列規律題目！</p>
+
+      <!-- 成績統計卡片 -->
+      <div class="bg-amber-50 rounded-2xl p-4 sm:p-6 mb-6 border-2 border-amber-200">
+        <div class="flex justify-around items-center mb-3 sm:mb-4">
+          <div class="text-center">
+            <div class="text-xs sm:text-sm font-bold text-slate-400">答對題數</div>
+            <div id="final-correct" class="text-2xl sm:text-3xl font-black text-sky-500">20 / 20</div>
+          </div>
+          <div class="h-8 sm:h-10 w-0.5 bg-amber-200"></div>
+          <div class="text-center">
+            <div class="text-xs sm:text-sm font-bold text-slate-400">獲得星星</div>
+            <div class="flex items-center justify-center gap-1">
+              <span id="final-stars" class="text-2xl sm:text-3xl font-black text-amber-500">20</span>
+              <i class="fa-solid fa-star text-amber-400 text-xl sm:text-2xl"></i>
+            </div>
+          </div>
+        </div>
+        <p id="performance-comment" class="text-amber-700 font-extrabold text-base sm:text-lg">🌟 完美全對！超級排列大師！</p>
+      </div>
+
+      <!-- 再玩一次按鈕 -->
+      <button onclick="restartGame()" class="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-white font-black text-base sm:text-lg py-3.5 sm:py-4 px-8 rounded-2xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2">
+        <i class="fa-solid fa-rotate-right"></i> 再玩一次（隨機打亂題目）
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. 20 道題目的完整原始題庫 (3~5 種類別，6~10 長度)
+    // ==========================================
+    const originalQuestions = [
+      // 1. 家電 (4類別, 長度8)
+      {
+        categories: [
+          { icon: 'fa-box-archive', label: '雪櫃', color: 'text-blue-500' },
+          { icon: 'fa-kitchen-set', label: '電飯煲', color: 'text-red-400' },
+          { icon: 'fa-fan', label: '風扇', color: 'text-teal-500' },
+          { icon: 'fa-lightbulb', label: '檯燈', color: 'text-amber-500' }
+        ],
+        length: 8,
+        blankIndex: 7 // A-B-C-D-A-B-C-[D]
+      },
+      // 2. 傢俬 (3類別, 長度6)
+      {
+        categories: [
+          { icon: 'fa-couch', label: '沙發', color: 'text-emerald-500' },
+          { icon: 'fa-chair', label: '椅子', color: 'text-purple-500' },
+          { icon: 'fa-bed', label: '雙人床', color: 'text-indigo-500' }
+        ],
+        length: 6,
+        blankIndex: 4 // A-B-C-A-[B]-C
+      },
+      // 3. 親人 (4類別, 長度7)
+      {
+        categories: [
+          { icon: 'fa-user-ninja', label: '爸爸', color: 'text-slate-700' },
+          { icon: 'fa-user-astronaut', label: '媽媽', color: 'text-pink-500' },
+          { icon: 'fa-user-tie', label: '姐姐', color: 'text-purple-500' },
+          { icon: 'fa-baby', label: 'BB', color: 'text-amber-500' }
+        ],
+        length: 7,
+        blankIndex: 3 // A-B-C-[D]-A-B-C
+      },
+      // 4. 水果 (5類別, 長度10)
+      {
+        categories: [
+          { icon: 'fa-apple-whole', label: '蘋果', color: 'text-red-500' },
+          { icon: 'fa-lemon', label: '檸檬', color: 'text-yellow-400' },
+          { icon: '', label: '香蕉', customIcon: '🍌' },
+          { icon: '', label: '西瓜', customIcon: '🍉' },
+          { icon: '', label: '葡萄', customIcon: '🍇' }
+        ],
+        length: 10,
+        blankIndex: 9 // A-B-C-D-E-A-B-C-D-[E]
+      },
+      // 5. 動物園 (3類別, 長度9)
+      {
+        categories: [
+          { icon: 'fa-dog', label: '小狗', color: 'text-amber-600' },
+          { icon: 'fa-cat', label: '小貓', color: 'text-orange-400' },
+          { icon: 'fa-frog', label: '青蛙', color: 'text-emerald-500' }
+        ],
+        length: 9,
+        blankIndex: 5 // A-B-C-A-B-[C]-A-B-C
+      },
+      // 6. 幾何圖形 (4類別, 長度8)
+      {
+        categories: [
+          { icon: 'fa-circle', label: '圓形', color: 'text-red-500' },
+          { icon: 'fa-square', label: '正方形', color: 'text-blue-500' },
+          { icon: 'fa-play', label: '三角形', color: 'text-green-500', rotate: '-90deg' },
+          { icon: 'fa-star', label: '星星', color: 'text-amber-400' }
+        ],
+        length: 8,
+        blankIndex: 6 // A-B-C-D-A-B-[C]-D
+      },
+      // 7. 交通工具 (5類別, 長度10)
+      {
+        categories: [
+          { icon: 'fa-car', label: '汽車', color: 'text-red-500' },
+          { icon: 'fa-bus', label: '巴士', color: 'text-amber-500' },
+          { icon: 'fa-bicycle', label: '單車', color: 'text-emerald-500' },
+          { icon: 'fa-plane', label: '飛機', color: 'text-sky-500' },
+          { icon: 'fa-ship', label: '輪船', color: 'text-indigo-500' }
+        ],
+        length: 10,
+        blankIndex: 7 // A-B-C-D-E-A-B-[C]-D-E
+      },
+      // 8. 美食 (3類別, 長度7)
+      {
+        categories: [
+          { icon: 'fa-burger', label: '漢堡', color: 'text-amber-600' },
+          { icon: 'fa-pizza-slice', label: '薄餅', color: 'text-orange-500' },
+          { icon: 'fa-ice-cream', label: '雪糕', color: 'text-pink-400' }
+        ],
+        length: 7,
+        blankIndex: 6 // A-B-C-A-B-C-[A]
+      },
+      // 9. 天氣 (4類別, 長度8)
+      {
+        categories: [
+          { icon: 'fa-sun', label: '太陽', color: 'text-amber-500' },
+          { icon: 'fa-cloud-rain', label: '下雨', color: 'text-blue-400' },
+          { icon: 'fa-snowflake', label: '雪花', color: 'text-cyan-300' },
+          { icon: 'fa-bolt', label: '閃電', color: 'text-yellow-400' }
+        ],
+        length: 8,
+        blankIndex: 4 // A-B-C-D-[A]-B-C-D
+      },
+      // 10. 球類 (3類別, 長度8)
+      {
+        categories: [
+          { icon: 'fa-basketball', label: '籃球', color: 'text-orange-500' },
+          { icon: 'fa-football', label: '橄欖球', color: 'text-amber-800' },
+          { icon: 'fa-baseball', label: '棒球', color: 'text-slate-600' }
+        ],
+        length: 8,
+        blankIndex: 7 // A-B-C-A-B-C-A-[B]
+      },
+      // 11. 文具 (4類別, 長度7)
+      {
+        categories: [
+          { icon: 'fa-pencil', label: '鉛筆', color: 'text-amber-500' },
+          { icon: 'fa-book', label: '書本', color: 'text-blue-500' },
+          { icon: 'fa-scissors', label: '剪刀', color: 'text-red-400' },
+          { icon: 'fa-ruler', label: '尺子', color: 'text-emerald-500' }
+        ],
+        length: 7,
+        blankIndex: 5 // A-B-C-D-A-[B]-C
+      },
+      // 12. 海洋 (5類別, 長度9)
+      {
+        categories: [
+          { icon: 'fa-shrimp', label: '小蝦', color: 'text-rose-500' },
+          { icon: 'fa-fish-fins', label: '小魚', color: 'text-orange-400' },
+          { icon: '', label: '螃蟹', customIcon: '🦀' },
+          { icon: '', label: '章魚', customIcon: '🐙' },
+          { icon: '', label: '海豚', customIcon: '🐬' }
+        ],
+        length: 9,
+        blankIndex: 8 // A-B-C-D-E-A-B-C-[D]
+      },
+      // 13. 服飾 (3類別, 長度7)
+      {
+        categories: [
+          { icon: 'fa-shirt', label: '上衣', color: 'text-sky-500' },
+          { icon: 'fa-socks', label: '襪子', color: 'text-pink-400' },
+          { icon: 'fa-hat-cowboy', label: '帽子', color: 'text-amber-600' }
+        ],
+        length: 7,
+        blankIndex: 3 // A-B-C-[A]-B-C-A
+      },
+      // 14. 樂器 (4類別, 長度9)
+      {
+        categories: [
+          { icon: 'fa-guitar', label: '結他', color: 'text-amber-600' },
+          { icon: 'fa-drum', label: '爵士鼓', color: 'text-red-500' },
+          { icon: 'fa-bell', label: '搖鈴', color: 'text-yellow-400' },
+          { icon: 'fa-record-vinyl', label: '唱片', color: 'text-slate-800' }
+        ],
+        length: 9,
+        blankIndex: 7 // A-B-C-D-A-B-C-[D]-A
+      },
+      // 15. 植物 (3類別, 長度8)
+      {
+        categories: [
+          { icon: 'fa-seedling', label: '幼苗', color: 'text-emerald-500' },
+          { icon: 'fa-tree', label: '大樹', color: 'text-green-700' },
+          { icon: '', label: '櫻花', customIcon: '🌸' }
+        ],
+        length: 8,
+        blankIndex: 5 // A-B-C-A-B-[C]-A-B
+      },
+      // 16. 宇宙 (5類別, 長度10)
+      {
+        categories: [
+          { icon: 'fa-user-astronaut', label: '宇航員', color: 'text-slate-700' },
+          { icon: 'fa-rocket', label: '火箭', color: 'text-rose-500' },
+          { icon: 'fa-globe', label: '地球', color: 'text-blue-500' },
+          { icon: 'fa-moon', label: '月亮', color: 'text-amber-300' },
+          { icon: 'fa-meteor', label: '流星', color: 'text-purple-500' }
+        ],
+        length: 10,
+        blankIndex: 9 // A-B-C-D-E-A-B-C-D-[E]
+      },
+      // 17. 農場 (4類別, 長度8)
+      {
+        categories: [
+          { icon: 'fa-cow', label: '乳牛', color: 'text-slate-800' },
+          { icon: 'fa-horse', label: '小馬', color: 'text-amber-700' },
+          { icon: 'fa-piggy-bank', label: '小豬', color: 'text-pink-400' },
+          { icon: 'fa-crow', label: '小鳥', color: 'text-indigo-900' }
+        ],
+        length: 8,
+        blankIndex: 6 // A-B-C-D-A-B-[C]-D
+      },
+      // 18. 甜品 (3類別, 長度9)
+      {
+        categories: [
+          { icon: 'fa-cake-candles', label: '蛋糕', color: 'text-pink-500' },
+          { icon: 'fa-candy-cane', label: '糖果', color: 'text-red-500' },
+          { icon: '', label: '蘋果派', customIcon: '🥧' }
+        ],
+        length: 9,
+        blankIndex: 8 // A-B-C-A-B-C-A-B-[C]
+      },
+      // 19. 表情 (4類別, 長度7)
+      {
+        categories: [
+          { icon: 'fa-face-smile', label: '笑臉', color: 'text-amber-400' },
+          { icon: 'fa-face-laugh-beam', label: '大笑', color: 'text-yellow-500' },
+          { icon: 'fa-face-surprise', label: '驚訝', color: 'text-orange-400' },
+          { icon: 'fa-face-grin-stars', label: '星星眼', color: 'text-amber-500' }
+        ],
+        length: 7,
+        blankIndex: 4 // A-B-C-D-[A]-B-C
+      },
+      // 20. 生態 (5類別, 長度10)
+      {
+        categories: [
+          { icon: '', label: '小雞', customIcon: '🐥' },
+          { icon: '', label: '兔子', customIcon: '🐰' },
+          { icon: '', label: '小綿羊', customIcon: '🐑' },
+          { icon: '', label: '蜜蜂', customIcon: '🐝' },
+          { icon: '', label: '向日葵', customIcon: '🌻' }
+        ],
+        length: 10,
+        blankIndex: 7 // A-B-C-D-E-A-B-[C]-D-E
+      }
+    ];
+
+    // ==========================================
+    // 2. 遊戲狀態與洗牌算法
+    // ==========================================
+    let shuffledQuestions = [];
+    let currentQuestionIndex = 0;
+    let starsEarned = 0;
+    let correctAnswersCount = 0;
+    let audioCtx = null;
+
+    // Fisher-Yates 隨機洗牌演算法
+    function shuffleArray(array) {
+      const arr = JSON.parse(JSON.stringify(array));
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    // ==========================================
+    // 3. Web Audio API 音效 (拍手與音效合成)
+    // ==========================================
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playClappingSound() {
+      initAudio();
+      if (!audioCtx) return;
+
+      const duration = 1.4;
+      const now = audioCtx.currentTime;
+
+      // 生成拍手聲音的噪聲
+      const bufferSize = audioCtx.sampleRate * duration;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1100;
+      filter.Q.value = 1.2;
+
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0, now);
+
+      // 多次脈衝模擬掌聲
+      for (let i = 0; i < 22; i++) {
+        const time = now + Math.random() * 1.1;
+        gain.gain.setValueAtTime(0.35, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.07);
+      }
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      noise.start(now);
+      noise.stop(now + duration);
+
+      // 叮咚音階懸律
+      const notes = [523.25, 659.25, 783.99, 1046.50];
+      notes.forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const noteGain = audioCtx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.value = freq;
+
+        const startTime = now + idx * 0.1;
+        noteGain.gain.setValueAtTime(0.2, startTime);
+        noteGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.3);
+
+        osc.connect(noteGain);
+        noteGain.connect(audioCtx.destination);
+
+        osc.start(startTime);
+        osc.stop(startTime + 0.3);
+      });
+    }
+
+    function playWrongSound() {
+      initAudio();
+      if (!audioCtx) return;
+
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(180, now);
+      osc.frequency.exponentialRampToValueAtTime(110, now + 0.3);
+
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.3);
+    }
+
+    // ==========================================
+    // 4. 遊戲核心邏輯
+    // ==========================================
+
+    function loadQuestion() {
+      const q = shuffledQuestions[currentQuestionIndex];
+      const seqContainer = document.getElementById('sequence-container');
+      const optContainer = document.getElementById('options-container');
+      const feedbackMsg = document.getElementById('feedback-message');
+
+      feedbackMsg.className = "hidden";
+      document.getElementById('current-question-num').innerText = currentQuestionIndex + 1;
+
+      // 更新題目提示文字
+      const catCount = q.categories.length;
+      document.getElementById('pattern-hint').innerHTML = `<i class="fa-solid fa-lightbulb"></i> 觀察 ${catCount} 個類別的循環規律（長度 ${q.length}）`;
+
+      seqContainer.innerHTML = '';
+      optContainer.innerHTML = '';
+
+      // 構建整個題目序列
+      const sequence = [];
+      for (let i = 0; i < q.length; i++) {
+        const catItem = q.categories[i % catCount];
+        sequence.push(catItem);
+      }
+
+      // 渲染單行序列項目 (嚴格 flex-nowrap 並排)
+      sequence.forEach((item, idx) => {
+        const isBlank = (idx === q.blankIndex);
+        const card = document.createElement('div');
+        
+        card.className = `flex-1 min-w-0 flex flex-col items-center justify-center py-2 px-0.5 rounded-xl md:rounded-2xl transition-all ${
+          isBlank 
+            ? 'slot-blank shadow-inner h-20 sm:h-24 md:h-28' 
+            : 'bg-white border-2 border-slate-200 shadow-sm hover:border-amber-300 h-20 sm:h-24 md:h-28'
+        }`;
+
+        if (isBlank) {
+          card.innerHTML = `
+            <span class="text-amber-500 font-black text-xl sm:text-2xl md:text-3xl animate-pulse">?</span>
+            <div class="w-full h-1 bg-amber-400 rounded-full mt-1 sm:mt-2"></div>
+          `;
+        } else {
+          const iconHtml = item.customIcon 
+            ? `<span class="text-xl sm:text-3xl md:text-4xl">${item.customIcon}</span>`
+            : `<i class="fa-solid ${item.icon} text-xl sm:text-3xl md:text-4xl ${item.color}" style="${item.rotate ? 'transform: rotate('+item.rotate+');' : ''}"></i>`;
+
+          card.innerHTML = `
+            ${iconHtml}
+            <span class="text-[9px] sm:text-[11px] md:text-xs font-bold text-slate-600 mt-1 sm:mt-2 text-center truncate w-full">${item.label}</span>
+          `;
+        }
+
+        seqContainer.appendChild(card);
+      });
+
+      // 正確答案在類別中的索引
+      const correctAnswerCatIndex = q.blankIndex % catCount;
+
+      // 生成選項按鈕
+      q.categories.forEach((catItem, idx) => {
+        const btn = document.createElement('button');
+        
+        btn.className = "bg-white hover:bg-amber-50 border-3 border-amber-200 hover:border-amber-400 p-2.5 sm:p-4 md:p-5 rounded-2xl md:rounded-3xl shadow-md hover:shadow-lg transition-all active:scale-95 flex flex-col items-center justify-center min-w-[75px] sm:min-w-[100px] md:min-w-[120px] group";
+        
+        const iconHtml = catItem.customIcon 
+          ? `<span class="text-2xl sm:text-4xl md:text-5xl group-hover:scale-110 transition-transform">${catItem.customIcon}</span>`
+          : `<i class="fa-solid ${catItem.icon} text-2xl sm:text-4xl md:text-5xl ${catItem.color} group-hover:scale-110 transition-transform" style="${catItem.rotate ? 'transform: rotate('+catItem.rotate+');' : ''}"></i>`;
+
+        btn.innerHTML = `
+          ${iconHtml}
+          <span class="text-[10px] sm:text-xs md:text-sm font-extrabold text-slate-700 mt-1.5 sm:mt-2">${catItem.label}</span>
+        `;
+
+        btn.onclick = () => checkAnswer(idx === correctAnswerCatIndex, btn);
+        optContainer.appendChild(btn);
+      });
+    }
+
+    function checkAnswer(isCorrect, btnElement) {
+      const feedbackMsg = document.getElementById('feedback-message');
+
+      if (isCorrect) {
+        starsEarned++;
+        correctAnswersCount++;
+        document.getElementById('star-count').innerText = starsEarned;
+
+        feedbackMsg.innerText = "🎉 答對了！太棒了！";
+        feedbackMsg.className = "mb-3 text-center py-2 px-6 rounded-full text-sm sm:text-lg font-black bg-emerald-100 text-emerald-700 border border-emerald-300 block bounce-in max-w-md mx-auto";
+
+        playClappingSound();
+
+        confetti({
+          particleCount: 85,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+
+        disableOptionButtons();
+
+        setTimeout(() => {
+          currentQuestionIndex++;
+          if (currentQuestionIndex < shuffledQuestions.length) {
+            loadQuestion();
+          } else {
+            showSummary();
+          }
+        }, 1500);
+
+      } else {
+        playWrongSound();
+        feedbackMsg.innerText = "💡 再想一想哦，觀察前面的循環規律！";
+        feedbackMsg.className = "mb-3 text-center py-2 px-6 rounded-full text-sm sm:text-lg font-black bg-rose-100 text-rose-700 border border-rose-300 block shake max-w-md mx-auto";
+
+        btnElement.classList.add('shake');
+        setTimeout(() => btnElement.classList.remove('shake'), 500);
+      }
+    }
+
+    function disableOptionButtons() {
+      const btns = document.querySelectorAll('#options-container button');
+      btns.forEach(b => b.disabled = true);
+    }
+
+    function showSummary() {
+      document.getElementById('final-correct').innerText = `${correctAnswersCount} / 20`;
+      document.getElementById('final-stars').innerText = starsEarned;
+      
+      const commentEl = document.getElementById('performance-comment');
+      if (starsEarned === 20) {
+        commentEl.innerText = "🌟 完美全對！超級排列大師！";
+      } else if (starsEarned >= 15) {
+        commentEl.innerText = "👏 非常棒！規律掌握得很好！";
+      } else {
+        commentEl.innerText = "👍 繼續加油，再試一次吧！";
+      }
+
+      document.getElementById('summary-modal').classList.remove('hidden');
+
+      const duration = 3 * 1000;
+      const end = Date.now() + duration;
+
+      (function frame() {
+        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
+        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
+
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
+        }
+      })();
+    }
+
+    function restartGame() {
+      currentQuestionIndex = 0;
+      starsEarned = 0;
+      correctAnswersCount = 0;
+      document.getElementById('star-count').innerText = 0;
+      document.getElementById('summary-modal').classList.add('hidden');
+      
+      // 每次重玩均重新洗牌打亂題目順序
+      shuffledQuestions = shuffleArray(originalQuestions);
+      loadQuestion();
+    }
+
+    function playPromptSound() {
+      initAudio();
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.2);
+    }
+
+    window.onload = function() {
+      // 遊戲初始化：打亂題目順序
+      shuffledQuestions = shuffleArray(originalQuestions);
+      loadQuestion();
+    };
+  </script>
+</body>
+</html>
